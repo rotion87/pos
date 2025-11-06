@@ -1,0 +1,373 @@
+
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>草率季・收銀系統（DOS Blue/Yellow）</title>
+  <meta name="theme-color" content="#0000AA">
+  <link rel="stylesheet" href="dos.css">
+  <!-- iOS Fullscreen / PWA -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="收銀（DOS）">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="manifest.webmanifest">
+  <style>
+    /* iPad 放大樣式（與 v2 同等級） */
+    body { font-size: 20px; }
+    .topline { font-size: 36px; padding: 16px 18px; font-weight: bold; }
+    .sum-bar { font-size: 32px; }
+    .p-name, .p-price { font-size: 22px; }
+    .qty button { font-size: 24px; padding: 10px 12px; }
+    .qty .q { font-size: 22px; min-width: 36px; }
+    .pay-box label, .receipt-title { font-size: 22px; }
+    .primary, .quick button { font-size: 22px; padding: 10px 16px; }
+    .overlay-card { transform: scale(1.15); transform-origin: center top; }
+    #install-hint{
+      position:fixed; left:50%; transform:translateX(-50%); bottom:12px;
+      background:#000044; color:#FFFF55; border:2px solid #FFFF55;
+      padding:8px 12px; z-index:100; display:none; font-family:'LanaPixel','Menlo',monospace;
+    }
+  </style>
+</head>
+<body>
+  <audio id="ding" src="assets/sounds/ding.wav" preload="auto"></audio>
+  <audio id="key" src="assets/sounds/key.wav" preload="auto"></audio>
+
+  <div class="topline vga">
+    <div id="clock">--:--:--</div>
+    <div id="today-stats">今日銷售：0 筆／NT$ 0</div>
+  </div>
+
+  <div id="app" class="wrap" aria-live="polite">
+    <section id="page-products" class="page active">
+      <div class="sum-bar vga">
+        合計金額：<span id="sum-top">NT$ 0</span>
+      </div>
+      <ul id="prod-list" class="prod-list"></ul>
+      <div class="bar actions">
+        <button id="btn-subtotal" class="primary">小計 →</button>
+      </div>
+    </section>
+
+    <section id="page-pay" class="page">
+      <div class="sum-bar vga">
+        合計金額：<span id="sum-pay">NT$ 0</span>
+      </div>
+      <div class="pay-box">
+        <label>輸入收現金金額：</label>
+        <input id="cash-input" type="number" inputmode="numeric" placeholder="輸入金額">
+        <div class="quick">
+          <button data-cash="exact">剛好</button>
+          <button data-cash="100">+100</button>
+          <button data-cash="500">+500</button>
+          <button data-cash="1000">+1000</button>
+        </div>
+        <div class="bar">
+          <button id="btn-back" class="">返回</button>
+          <button id="btn-confirm" class="primary">確定</button>
+        </div>
+
+        <div id="result" class="result hidden">
+          <div class="dos-frame tight bigbox">
+            <div class="dos-inner bigtext">
+              <div class="row vga"><span>收　款：</span><span id="r-receive">0</span><span> 元</span></div>
+              <div class="row vga"><span>合　計：</span><span id="r-total">0</span><span> 元</span></div>
+              <div class="row vga"><span>找　回：</span><span id="r-change">0</span><span> 元</span></div>
+              <div id="r-deficit" class="deficit hidden vga">金額不足：還差 <b id="r-short">0</b> 元</div>
+            </div>
+          </div>
+          <div class="receipt zoomed">
+            <div class="receipt-title">本次購買內容（確認）</div>
+            <ul id="receipt-list"></ul>
+            <hr class="line">
+            <div class="summary vga">
+              合計 <b id="sum-b">0</b> 元 ｜ 收款 <b id="rcv-b">0</b> 元 ｜ 找零 <b id="chg-b">0</b> 元
+            </div>
+          </div>
+          <div class="bar">
+            <button id="btn-finish" class="primary" disabled>完成結帳</button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </div>
+
+  <div id="overlay-thanks" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="thanks-title">
+    <div class="overlay-card">
+      <div class="sprite-rolo" aria-label="RO & LO bow animation"></div>
+      <div id="thanks-title" class="thanks-title vga">┌──────────────────┐<br>
+      ├ 感謝您的光顧，歡迎下次再來 ┤<br>
+      └──────────────────┘</div>
+
+      <div class="receipt final">
+        <div class="receipt-title">本次購買內容（已完成）</div>
+        <ul id="receipt-final"></ul>
+        <hr class="line">
+        <div class="summary vga">
+          合計 <b id="sum-f">0</b> 元 ｜ 收款 <b id="rcv-f">0</b> 元 ｜ 找零 <b id="chg-f">0</b> 元
+        </div>
+      </div>
+
+      <div class="bar">
+        <button id="btn-return" class="primary">確認返回主頁</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <div id="install-hint">將此頁「加入主畫面」以全螢幕使用（Safari：分享 → 加入主畫面）。</div>
+
+  <script>
+  const PRODUCTS = [
+    {name:'《空心 In Place》', price:888, qty:0},
+    {name:'《30時間》 小誌', price:250, qty:0},
+    {name:'《30時間》 海報', price:100, qty:0},
+    {name:'《Hand-it 手心貼》', price:250, qty:0},
+    {name:'《Soft Drinks》', price:500, qty:0},
+    {name:'《pasteport 貼紙簿-街》', price:250, qty:0},
+    {name:'《pasteport 貼紙簿-危》', price:250, qty:0},
+    {name:'《蠟燭》', price:120, qty:0},
+    {name:'《馬年賀卡》', price:100, qty:0},
+    {name:'《pipo君貼紙》', price:50, qty:0},
+  ];
+  const el = s => document.querySelector(s);
+  const els = s => Array.from(document.querySelectorAll(s));
+  const keySound = () => { try{ const a = el('#key'); a.volume=0.5; a.currentTime = 0; a.play(); }catch(e){} };
+  const dingSound = () => { try{ const a = el('#ding'); a.volume=0.7; a.currentTime = 0; a.play(); }catch(e){} };
+
+  function money(n){ return Number(n||0).toFixed(0); }
+  function formatNT(n){ return 'NT$ ' + money(n); }
+  function calcSum(){ return PRODUCTS.reduce((s,p)=> s + p.price * (p.qty||0), 0); }
+
+  let selectedIndex = 0;
+  function renderList(){
+    const ul = el('#prod-list');
+    ul.innerHTML = '';
+    PRODUCTS.forEach((p, idx)=>{
+      const li = document.createElement('li');
+      li.className = 'row prod' + (idx===selectedIndex?' active':'');
+      li.innerHTML = `
+        <span class="p-name">${p.name}</span>
+        <span class="p-price vga">$${p.price}</span>
+        <div class="qty">
+          <button class="minus" aria-label="minus">−</button>
+          <span class="q vga">${p.qty||0}</span>
+          <button class="plus" aria-label="plus">＋</button>
+        </div>
+      `;
+      li.querySelector('.minus').addEventListener('click', ()=>{
+        PRODUCTS[idx].qty = Math.max(0, (PRODUCTS[idx].qty||0)-1);
+        keySound(); updateSumAndList(idx, li);
+      });
+      li.querySelector('.plus').addEventListener('click', ()=>{
+        PRODUCTS[idx].qty = (PRODUCTS[idx].qty||0)+1;
+        keySound(); updateSumAndList(idx, li);
+      });
+      ul.appendChild(li);
+    });
+    updateSumTop();
+    ensureVisible();
+  }
+  function updateSumAndList(idx, li){ li.querySelector('.q').textContent = PRODUCTS[idx].qty||0; updateSumTop(); }
+  function updateSumTop(){ el('#sum-top').textContent = formatNT(calcSum()); }
+  function ensureVisible(){
+    const rows = els('.row.prod'); const a = rows[selectedIndex];
+    if(a){ a.scrollIntoView({block:'nearest'}); }
+  }
+  function selectPrev(){ selectedIndex = Math.max(0, selectedIndex-1); keySound(); renderList(); }
+  function selectNext(){ selectedIndex = Math.min(PRODUCTS.length-1, selectedIndex+1); keySound(); renderList(); }
+  function increaseQty(){ PRODUCTS[selectedIndex].qty = (PRODUCTS[selectedIndex].qty||0)+1; keySound(); renderList(); }
+  function decreaseQty(){ PRODUCTS[selectedIndex].qty = Math.max(0,(PRODUCTS[selectedIndex].qty||0)-1); keySound(); renderList(); }
+
+  function onProductsPage(){ return el('#page-products').classList.contains('active'); }
+  function onPayPage(){ return el('#page-pay').classList.contains('active'); }
+  function gotoPage(id){ els('.page').forEach(p=> p.classList.remove('active')); el(id).classList.add('active'); }
+
+  const KEY = 'pos.records';
+  const loadAll = () => { try{return JSON.parse(localStorage.getItem(KEY)||'[]');}catch(e){return [];} };
+  const saveAll = arr => localStorage.setItem(KEY, JSON.stringify(arr));
+  const saveRecord = rec => { const all=loadAll(); all.push(rec); saveAll(all); refreshTodayStats(); };
+
+  function resetAllQty(){ PRODUCTS.forEach(p=> p.qty = 0); renderList(); }
+
+  function refreshTodayStats(){
+    const today = new Date().toISOString().slice(0,10);
+    const list = loadAll().filter(r=> (r.ts||'').slice(0,10) === today);
+    const sum = list.reduce((s,r)=> s + (r.total||0), 0);
+    el('#today-stats').textContent = `今日銷售：${list.length} 筆／${formatNT(sum)}`;
+  }
+  function startClock(){
+    const pad = n => String(n).padStart(2,'0');
+    setInterval(()=>{
+      const d = new Date();
+      const date = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+      const time = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      el('#clock').textContent = `${date} ${time}`;
+    }, 500);
+  }
+
+  function enterPayPage(){
+    const sum = calcSum();
+    if(sum<=0){ showToast('目前合計為 0，請先選擇數量。'); keySound(); return; }
+    el('#sum-pay').textContent = formatNT(sum);
+    el('#cash-input').value = '';
+    el('#result').classList.add('hidden');
+    keySound();
+    gotoPage('#page-pay');
+  }
+
+  function buildReceiptList(items, targetUl){
+    const ul = el(targetUl); ul.innerHTML = '';
+    items.forEach(it=>{
+      const li = document.createElement('li');
+      li.textContent = `${it.name} × ${it.qty} ＝ NT$ ${money(it.qty * it.price)}`;
+      ul.appendChild(li);
+    });
+  }
+
+  function confirmCash(){
+    const sum = calcSum();
+    const received = Number(el('#cash-input').value||0);
+    const change = Math.max(received - sum, 0);
+    const short = Math.max(sum - received, 0);
+    const items = PRODUCTS.filter(p=> (p.qty||0)>0).map(p=> ({name:p.name, price:p.price, qty:p.qty}));
+
+    el('#r-total').textContent = money(sum);
+    el('#r-receive').textContent = money(received);
+    el('#r-change').textContent = money(change);
+    buildReceiptList(items, '#receipt-list');
+    el('#sum-b').textContent = money(sum);
+    el('#rcv-b').textContent = money(received);
+    el('#chg-b').textContent = money(change);
+
+    const deficit = el('#r-deficit');
+    const shortEl = el('#r-short');
+    const finishBtn = el('#btn-finish');
+    if(short > 0){
+      shortEl.textContent = money(short);
+      deficit.classList.remove('hidden');
+      finishBtn.disabled = true;
+    }else{
+      deficit.classList.add('hidden');
+      finishBtn.disabled = false;
+    }
+
+    keySound();
+    el('#result').classList.remove('hidden');
+  }
+
+  function finishCheckout(){
+    const sum = calcSum();
+    const received = Number(el('#cash-input').value||0);
+    if(received < sum){ keySound(); return; }
+    const change = Math.max(received - sum, 0);
+    const items = PRODUCTS.filter(p=> (p.qty||0)>0).map(p=> ({name:p.name, price:p.price, qty:p.qty}));
+
+    const rec = { ts:new Date().toISOString(), pm:'現金', total:sum, received, change, items };
+    saveRecord(rec);
+
+    resetAllQty();
+
+    dingSound();
+    buildReceiptList(items, '#receipt-final');
+    el('#sum-f').textContent = money(sum);
+    el('#rcv-f').textContent = money(received);
+    el('#chg-f').textContent = money(change);
+
+    openOverlay();
+  }
+
+  function openOverlay(){
+    const ov = el('#overlay-thanks');
+    ov.classList.remove('hidden');
+    ov.setAttribute('aria-hidden','false');
+    ov.focus();
+  }
+  function closeOverlay(){
+    const ov = el('#overlay-thanks');
+    ov.classList.add('hidden');
+    ov.setAttribute('aria-hidden','true');
+    gotoPage('#page-products');
+  }
+
+  function returnHome(){ keySound(); closeOverlay(); }
+
+  function showToast(text){
+    const t = el('#toast');
+    t.textContent = text || `今日銷售：${el('#today-stats').textContent.replace('今日銷售：','')}`;
+    t.classList.add('show');
+    setTimeout(()=> t.classList.remove('show'), 1500);
+  }
+
+  document.addEventListener('keydown', (e)=>{
+    if(e.key === ' '){ e.preventDefault(); }
+
+    if(onProductsPage()){
+      if(e.key === 'ArrowUp'){ selectPrev(); }
+      else if(e.key === 'ArrowDown'){ selectNext(); }
+      else if(e.key === 'ArrowLeft'){ decreaseQty(); }
+      else if(e.key === 'ArrowRight'){ increaseQty(); }
+      else if(e.key === 'Enter'){ enterPayPage(); }
+      else if(e.key.toLowerCase() === 't'){ showToast(); keySound(); }
+    }else if(onPayPage()){
+      const inp = el('#cash-input');
+      if(/[0-9]/.test(e.key)){ inp.value = String(inp.value||'') + e.key; keySound(); }
+      else if(e.key === 'Backspace'){ inp.value = String(inp.value||'').slice(0,-1); keySound(); }
+      else if(e.key === ' '){ inp.value = calcSum(); keySound(); }
+      else if(e.key === 'Enter'){ confirmCash(); }
+      else if(e.key.toLowerCase() === 'f'){ finishCheckout(); }
+      else if(e.key === 'Escape'){ gotoPage('#page-products'); keySound(); }
+      else if(e.key.toLowerCase() === 't'){ showToast(); keySound(); }
+    }
+
+    const ov = el('#overlay-thanks');
+    if(!ov.classList.contains('hidden')){
+      if(e.key === 'Enter' || e.key === 'Escape'){ returnHome(); }
+    }
+  });
+
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', ()=>{
+      navigator.serviceWorker.register('./sw.js').catch(()=>{});
+    });
+  }
+
+  window.addEventListener('DOMContentLoaded', ()=>{
+    renderList();
+    refreshTodayStats();
+    startClock();
+
+    el('#btn-subtotal').addEventListener('click', enterPayPage);
+
+    const quick = els('.quick button');
+    quick.forEach(b=> b.addEventListener('click', ()=>{
+      const sum = calcSum();
+      const v = b.dataset.cash;
+      let curr = Number(el('#cash-input').value||0);
+      if(v==='exact'){ curr = sum; } else { curr += Number(v||0); }
+      el('#cash-input').value = curr;
+      keySound();
+    }));
+
+    el('#btn-confirm').addEventListener('click', confirmCash);
+    el('#btn-finish').addEventListener('click', finishCheckout);
+    el('#btn-return').addEventListener('click', returnHome);
+    el('#btn-back').addEventListener('click', ()=> { keySound(); gotoPage('#page-products'); });
+  });
+
+  // iOS Install hint
+  function showInstallHintIfNeeded(){
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    const hint = document.getElementById('install-hint');
+    if(!isStandalone && hint){
+      hint.style.display = 'block';
+    }
+  }
+  window.addEventListener('load', showInstallHintIfNeeded);
+  </script>
+</body>
+</html>
