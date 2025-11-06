@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>草率季・收銀系統（DOS Blue/Yellow）</title>
+  <meta name="theme-color" content="#001080">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&family=Press+Start+2P&display=swap" rel="stylesheet">
+
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="dos.css">
+
+  <!-- 感謝視窗樣式 -->
+  <style>
+  #thanks-modal{ position:fixed; inset:0; display:none; place-items:center;
+    background:rgba(0,0,0,.55); z-index:9999; }
+  #thanks-modal.show{ display:grid; }
+  .thanks-box{
+    background:var(--panel2);
+    border:3px solid var(--border);
+    box-shadow: inset 0 0 8px #000a, 0 6px 18px rgba(0,0,0,.4);
+    padding:14px; max-width:80vw; width:min(520px, 90vw);
+    animation:pop .16s ease-out;
+  }
+  .thanks-inner{
+    border:2px solid var(--border2);
+    background:var(--panel);
+    padding:16px;
+    text-align:center;
+  }
+  .thanks-img{ width:100%; height:auto; image-rendering:pixelated; }
+  .thanks-text{ margin-top:10px; font-size:22px; color:var(--text); }
+  @keyframes pop{ from{ transform:scale(.92); opacity:.6 } to{ transform:scale(1); opacity:1 } }
+  </style>
+</head>
+<body>
+  <!-- 原本結帳音效 -->
+  <audio id="ding" src="ding.wav" preload="auto"></audio>
+  <!-- 鍵盤音效（沿用 ding.wav；若要短音可換檔名） -->
+  <audio id="key" src="ding.wav" preload="auto"></audio>
+
+  <div class="topline vga">
+    <div id="clock">--:--:--</div>
+    <div id="today-stats">今日銷售：0 筆／NT$ 0</div>
+    <button id="btn-history" style="margin-left:8px">歷史</button>
+    <button id="btn-fs" style="margin-left:8px">全螢幕</button>
+  </div>
+
+  <div id="app" class="wrap">
+    <!-- 頁面一：商品列表 -->
+    <section id="page-products" class="page active">
+      <div class="sum-bar vga">
+        合計金額：<span id="sum-top">NT$ 0</span>
+      </div>
+
+      <ul id="prod-list" class="prod-list"></ul>
+
+      <div class="bar actions">
+        <button id="btn-subtotal" class="primary">小計 →</button>
+      </div>
+    </section>
+
+    <!-- 頁面二：付款 -->
+    <section id="page-pay" class="page">
+      <div class="sum-bar vga">
+        合計金額：<span id="sum-pay">NT$ 0</span>
+      </div>
+
+      <div class="pay-box">
+        <label>輸入收現金金額：</label>
+        <input id="cash-input" type="number" inputmode="numeric" placeholder="輸入金額">
+        <div class="quick">
+          <button data-cash="exact">剛好</button>
+          <button data-cash="100">+100</button>
+          <button data-cash="500">+500</button>
+          <button data-cash="1000">+1000</button>
+        </div>
+
+        <div class="bar">
+          <button id="btn-back" class="">返回</button>
+          <button id="btn-confirm" class="primary">確定</button>
+        </div>
+
+        <!-- 結果＆收據 -->
+        <div id="result" class="result hidden">
+          <div class="dos-frame tight bigbox">
+            <div class="dos-inner bigtext">
+              <div class="row vga"><span>收　款：</span><span id="r-receive">0</span><span> 元</span></div>
+              <div class="row vga"><span>合　計：</span><span id="r-total">0</span><span> 元</span></div>
+              <div class="row vga"><span>找　回：</span><span id="r-change">0</span><span> 元</span></div>
+              <div id="r-deficit" class="deficit hidden vga">金額不足：還差 <b id="r-short">0</b> 元</div>
+            </div>
+          </div>
+
+          <div class="receipt zoomed">
+            <div class="receipt-title">本次購買內容</div>
+            <ul id="receipt-list"></ul>
+            <hr class="line">
+            <div class="summary vga">
+              合計 <b id="sum-b">0</b> 元 ｜ 收款 <b id="rcv-b">0</b> 元 ｜ 找零 <b id="chg-b">0</b> 元
+            </div>
+          </div>
+
+          <div class="bar">
+            <button id="btn-finish" class="primary" disabled>完成結帳</button>
+          </div>
+        </div>
+
+        <!-- 完成後要求確認返回 -->
+        <div id="after-finish" class="after hidden">
+          <div class="notice">交易完成！請確認後返回主頁。</div>
+          <div class="bar">
+            <button id="btn-return" class="primary">確認返回主頁</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 頁面三：歷史購買紀錄 -->
+    <section id="page-history" class="page">
+      <div class="sum-bar vga">歷史購買紀錄</div>
+
+      <div class="dos-frame tight">
+        <div class="dos-inner">
+          <div class="bar" style="justify-content:space-between;margin-bottom:10px">
+            <div id="history-summary" class="vga">共 0 筆／合計 NT$ 0</div>
+            <div>
+              <button id="btn-clear-all">清空所有紀錄</button>
+              <button id="btn-h-back" class="primary">返回主頁</button>
+            </div>
+          </div>
+
+          <ul id="history-list" style="list-style:none;padding:0;margin:0"></ul>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- 感謝視窗（完成結帳後顯示） -->
+  <div id="thanks-modal" role="dialog" aria-modal="true">
+    <div class="thanks-box">
+      <div class="thanks-inner">
+        <img class="thanks-img" src="S__67870744.png" alt="感謝光臨">
+        <div class="thanks-text vga">感謝您的光顧，歡迎下次再來！</div>
+        <div class="bar" style="justify-content:center; margin-top:10px">
+          <button id="thanks-close" class="primary">關閉</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+  // ====== 作品清單（預設數量為 0）======
+  const PRODUCTS = [
+    {name:'《空心 In Place》', price:888, qty:0},
+    {name:'《30時間》 小誌', price:250, qty:0},
+    {name:'《30時間》 海報', price:100, qty:0},
+    {name:'《Hand-it 手心貼》', price:250, qty:0},
+    {name:'《Soft Drinks》', price:500, qty:0},
+    {name:'《pasteport 貼紙簿-街》', price:250, qty:0},
+    {name:'《pasteport 貼紙簿-危》', price:250, qty:0},
+    {name:'《蠟燭》', price:120, qty:0},
+    {name:'《馬年賀卡》', price:100, qty:0},
+    {name:'《pipo君貼紙》', price:50, qty:0},
+  ];
+  // =====================================
+
+  const el = s => document.querySelector(s);
+  const els = s => Array.from(document.querySelectorAll(s));
+
+  function money(n){ return Number(n||0).toFixed(0); }
+  function formatNT(n){ return 'NT$ ' + money(n); }
+
+  function calcSum(){
+    return PRODUCTS.reduce((s,p)=> s + p.price * (p.qty||0), 0);
+  }
+
+  // === 音效與全螢幕工具 ===
+  function playAudioById(id){
+    try{
+      const a = typeof id === 'string' ? el(id) : id;
+      if(!a) return;
+      a.currentTime = 0;
+      a.play().catch(()=>{});
+    }catch(e){}
+  }
+
+  function isFullscreen(){
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+  function requestFullscreen(){
+    const de = document.documentElement;
+    if (de.requestFullscreen) return de.requestFullscreen();
+    if (de.webkitRequestFullscreen) return de.webkitRequestFullscreen();
+  }
+  function exitFullscreen(){
+    if (document.exitFullscreen) return document.exitFullscreen();
+    if (document.webkitExitFullscreen) return document.webkitExitFullscreen();
+  }
+  async function toggleFullscreen(){
+    if (isFullscreen()) await exitFullscreen();
+    else await requestFullscreen();
+  }
+
+  // ----- 列表渲染與選取狀態 -----
+  let selectedIndex = 0;
+  function renderList(){
+    const ul = el('#prod-list');
+    ul.innerHTML = '';
+    PRODUCTS.forEach((p, idx)=>{
+      const li = document.createElement('li');
+      li.className = 'row prod';
+      if(idx === selectedIndex) li.classList.add('active');
+      li.innerHTML = `
+        <span class="p-name">${p.name}</span>
+        <span class="p-price vga">$${p.price}</span>
+        <div class="qty">
+          <button class="minus" aria-label="minus">−</button>
+          <span class="q vga">${p.qty||0}</span>
+          <button class="plus" aria-label="plus">＋</button>
+        </div>
+      `;
+      li.querySelector('.minus').addEventListener('click', ()=>{
+        PRODUCTS[idx].qty = Math.max(0, (PRODUCTS[idx].qty||0)-1);
+        updateSumAndList(idx, li);
+      });
+      li.querySelector('.plus').addEventListener('click', ()=>{
+        PRODUCTS[idx].qty = (PRODUCTS[idx].qty||0)+1;
+        updateSumAndList(idx, li);
+      });
+      ul.appendChild(li);
+    });
+    updateSumTop();
+    ensureVisible();
+  }
+
+  function updateSumAndList(idx, li){
+    li.querySelector('.q').textContent = PRODUCTS[idx].qty||0;
+    updateSumTop();
+  }
+  function updateSumTop(){
+    const sum = calcSum();
+    el('#sum-top').textContent = formatNT(sum);
+  }
+
+  function ensureVisible(){
+    const rows = els('.row.prod');
+    const active = rows[selectedIndex];
+    if(active){ active.scrollIntoView({block:'nearest'}); }
+  }
+
+  function selectPrev(){
+    selectedIndex = Math.max(0, selectedIndex-1);
+    renderList();
+  }
+  function selectNext(){
+    selectedIndex = Math.min(PRODUCTS.length-1, selectedIndex+1);
+    renderList();
+  }
+  function increaseQty(){
+    PRODUCTS[selectedIndex].qty = (PRODUCTS[selectedIndex].qty||0)+1;
+    renderList();
+  }
+  function decreaseQty(){
+    PRODUCTS[selectedIndex].qty = Math.max(0,(PRODUCTS[selectedIndex].qty||0)-1);
+    renderList();
+  }
+
+  function onProductsPage(){ return el('#page-products').classList.contains('active'); }
+  function onPayPage(){ return el('#page-pay').classList.contains('active'); }
+
+  function gotoPage(id){
+    els('.page').forEach(p=> p.classList.remove('active'));
+    el(id).classList.add('active');
+  }
+
+  // ====== LocalStorage 紀錄 ======
+  const KEY = 'pos.records';
+  const loadAll = () => { try{return JSON.parse(localStorage.getItem(KEY)||'[]');}catch(e){return [];} };
+  const saveAll = arr => localStorage.setItem(KEY, JSON.stringify(arr));
+  const saveRecord = rec => { const all=loadAll(); all.push(rec); saveAll(all); refreshTodayStats(); };
+
+  function resetAllQty(){
+    PRODUCTS.forEach(p=> p.qty = 0);
+    renderList();
+  }
+
+  // 更新今日統計與時鐘
+  function refreshTodayStats(){
+    const today = new Date().toISOString().slice(0,10);
+    const list = loadAll().filter(r=> (r.ts||'').slice(0,10) === today);
+    const sum = list.reduce((s,r)=> s + (r.total||0), 0);
+    el('#today-stats').textContent = `今日銷售：${list.length} 筆／${formatNT(sum)}`;
+  }
+  function startClock(){
+    const pad = n => String(n).padStart(2,'0');
+    setInterval(()=>{
+      const d = new Date();
+      const date = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+      const time = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      el('#clock').textContent = `${date} ${time}`;
+    }, 500);
+  }
+
+  // ====== 歷史紀錄（渲染／刪除／清空） ======
+  function fmtTime(ts){
+    try{
+      const d = new Date(ts);
+      const pad = n => String(n).padStart(2,'0');
+      const date = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+      const time = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      return `${date} ${time}`;
+    }catch(e){ return ts || ''; }
+  }
+
+  function renderHistory(){
+    const list = loadAll();
+    const ul = el('#history-list'); ul.innerHTML = '';
+    const sum = list.reduce((s,r)=> s + (r.total||0), 0);
+    el('#history-summary').textContent = `共 ${list.length} 筆／合計 ${formatNT(sum)}`;
+
+    // 新到舊
+    list.slice().reverse().forEach((r, revIdx)=>{
+      const idx = list.length - 1 - revIdx;
+      const li = document.createElement('li');
+      li.className = 'receipt';
+      li.style.marginBottom = '12px';
+      const itemsText = (r.items||[]).map(it=> `${it.name} × ${it.qty}`).join('、');
+
+      li.innerHTML = `
+        <div class="receipt-title">${fmtTime(r.ts)}</div>
+        <div class="vga" style="margin:6px 0">品項：${itemsText || '—'}</div>
+        <div class="vga">合計：<b>${money(r.total||0)}</b> 元　｜　收款：${money(r.received||0)}　｜　找零：${money(r.change||0)}</div>
+        <div class="bar" style="justify-content:flex-end;margin-top:8px">
+          <button data-del="${idx}" class="danger">刪除</button>
+        </div>
+      `;
+      ul.appendChild(li);
+    });
+
+    // 綁定刪除
+    ul.querySelectorAll('button[data-del]').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        const idx = Number(b.dataset.del);
+        const arr = loadAll();
+        arr.splice(idx, 1);
+        saveAll(arr);
+        renderHistory();
+        refreshTodayStats();
+        showToast('已刪除一筆紀錄');
+      });
+    });
+  }
+
+  function gotoHistory(){
+    renderHistory();
+    gotoPage('#page-history');
+  }
+
+  // 付款頁相關
+  function enterPayPage(){
+    const sum = calcSum();
+    if(sum<=0){ showToast('目前合計為 0，請先選擇數量。'); return; }
+    el('#sum-pay').textContent = formatNT(sum);
+    el('#cash-input').value = '';
+    el('#result').classList.add('hidden');
+    el('#after-finish').classList.add('hidden');
+    gotoPage('#page-pay');
+  }
+
+  function buildReceiptList(items){
+    const ul = el('#receipt-list'); ul.innerHTML = '';
+    items.forEach(it=>{
+      const li = document.createElement('li');
+      li.textContent = `${it.name} × ${it.qty} ＝ NT$ ${money(it.qty * it.price)}`;
+      ul.appendChild(li);
+    });
+  }
+
+  function confirmCash(){
+    const sum = calcSum();
+    const received = Number(el('#cash-input').value||0);
+    const change = Math.max(received - sum, 0);
+    const short = Math.max(sum - received, 0);
+    const items = PRODUCTS.filter(p=> (p.qty||0)>0).map(p=> ({name:p.name, price:p.price, qty:p.qty}));
+
+    el('#r-total').textContent = money(sum);
+    el('#r-receive').textContent = money(received);
+    el('#r-change').textContent = money(change);
+    buildReceiptList(items);
+    el('#sum-b').textContent = money(sum);
+    el('#rcv-b').textContent = money(received);
+    el('#chg-b').textContent = money(change);
+
+    const deficit = el('#r-deficit');
+    const shortEl = el('#r-short');
+    const finishBtn = el('#btn-finish');
+    if(short > 0){
+      shortEl.textContent = money(short);
+      deficit.classList.remove('hidden');
+      finishBtn.disabled = true;
+    }else{
+      deficit.classList.add('hidden');
+      finishBtn.disabled = false;
+    }
+
+    el('#result').classList.remove('hidden');
+    el('#after-finish').classList.add('hidden');
+  }
+
+  // 感謝視窗：顯示/關閉（不再綁定全域 keydown，避免和 Enter 流程衝突）
+  function showThanksModal(){
+    const m = el('#thanks-modal');
+    if(!m) return;
+    m.classList.add('show');
+
+    const onClick = (e)=>{
+      if(e.target.id==='thanks-close' || e.target.id==='thanks-modal'){
+        m.classList.remove('show');
+        m.removeEventListener('click', onClick);
+      }
+    };
+    m.addEventListener('click', onClick);
+  }
+
+  function hideThanksModal(){
+    const m = el('#thanks-modal');
+    if(m && m.classList.contains('show')) m.classList.remove('show');
+  }
+
+  function finishCheckout(){
+    const sum = calcSum();
+    const received = Number(el('#cash-input').value||0);
+    if(received < sum){ return; } // guard
+    const change = Math.max(received - sum, 0);
+    const items = PRODUCTS.filter(p=> (p.qty||0)>0).map(p=> ({name:p.name, price:p.price, qty:p.qty}));
+
+    const rec = { ts:new Date().toISOString(), pm:'現金', total:sum, received, change, items };
+    saveRecord(rec);
+
+    try{ playAudioById('#ding'); }catch(e){}
+    resetAllQty();
+    el('#result').classList.add('hidden');
+    el('#after-finish').classList.remove('hidden');
+
+    // 顯示感謝視窗
+    showThanksModal();
+  }
+
+  function returnHome(){
+    gotoPage('#page-products');
+  }
+
+  // ---- Toast ----
+  function showToast(text){
+    const t = el('#toast');
+    t.textContent = text || `今日銷售：${el('#today-stats').textContent.replace('今日銷售：','')}`;
+    t.classList.add('show');
+    setTimeout(()=> t.classList.remove('show'), 1500);
+  }
+
+  // ---- 鍵盤控制（含鍵音／首次互動自動全螢幕／Alt+Enter 切換）----
+  let firstUserInteractionDone = false;
+
+  document.addEventListener('keydown', async (e)=>{
+    // 任何鍵都發聲
+    playAudioById('#key');
+
+    // 第一次互動自動全螢幕
+    if(!firstUserInteractionDone){
+      firstUserInteractionDone = true;
+      try{ await requestFullscreen(); }catch(_){}
+    }
+
+    // 阻止空白鍵捲動
+    if(e.key === ' '){ e.preventDefault(); }
+
+    // 快速顯示今日統計
+    if(e.key.toLowerCase() === 't'){
+      showToast();
+      return;
+    }
+
+    // Alt+Enter 切換全螢幕
+    if(e.altKey && e.key === 'Enter'){
+      try{ await toggleFullscreen(); }catch(_){}
+      return;
+    }
+
+    if(onProductsPage()){
+      if(e.key === 'ArrowUp'){ selectPrev(); }
+      else if(e.key === 'ArrowDown'){ selectNext(); }
+      else if(e.key === 'ArrowLeft'){ decreaseQty(); }
+      else if(e.key === 'ArrowRight'){ increaseQty(); }
+      else if(e.key === 'Enter'){ enterPayPage(); }
+    }else if(onPayPage()){
+      const inp = el('#cash-input');
+      const resultShown = !el('#result').classList.contains('hidden');
+      const finishedShown = !el('#after-finish').classList.contains('hidden');
+
+      // 數字輸入
+      if(/[0-9]/.test(e.key)){
+        inp.value = String(inp.value||'') + e.key;
+      }else if(e.key === 'Backspace'){
+        inp.value = String(inp.value||'').slice(0,-1);
+      }else if(e.key === ' '){
+        // 剛好
+        inp.value = calcSum();
+      }else if(e.key === 'Enter' || e.code === 'NumpadEnter'){
+        // Enter 1：顯示收據；Enter 2：完成結帳；Enter 3：關感謝視窗並回主頁
+        if(!resultShown && !finishedShown){
+          confirmCash();
+        }else if(resultShown && !finishedShown){
+          finishCheckout();
+        }else{
+          // 完成畫面
+          hideThanksModal();
+          returnHome();
+        }
+      }else if(e.key.toLowerCase() === 'f'){
+        finishCheckout();
+      }else if(e.key === 'Escape'){
+        gotoPage('#page-products');
+      }
+    }
+  });
+
+  // ====== 數字小鍵盤支援（iPad / 外接鍵盤用）======
+  document.addEventListener('keydown', e=>{
+    if(onPayPage()){
+      if(e.code === 'NumpadAdd'){ el('[data-cash="100"]').click(); }
+      if(e.code === 'NumpadMultiply'){ el('[data-cash="500"]').click(); }
+      if(e.code === 'NumpadDivide'){ el('[data-cash="1000"]').click(); }
+      if(e.code === 'NumpadSubtract'){ el('[data-cash="exact"]').click(); }
+      if(e.code === 'NumpadEnter'){ /* Enter 流程已在上面統一處理 */ }
+    }
+  });
+
+  window.addEventListener('DOMContentLoaded', ()=>{
+    renderList();
+    refreshTodayStats();
+    startClock();
+
+    // 小計 → 前往付款頁
+    el('#btn-subtotal').addEventListener('click', enterPayPage);
+
+    // 快捷金額按鈕
+    els('.quick button').forEach(b=> b.addEventListener('click', ()=>{
+      const sum = calcSum();
+      const v = b.dataset.cash;
+      let curr = Number(el('#cash-input').value||0);
+      if(v==='exact'){ curr = sum; } else { curr += Number(v||0); }
+      el('#cash-input').value = curr;
+    }));
+
+    // 付款流程
+    el('#btn-confirm').addEventListener('click', confirmCash);
+    el('#btn-finish').addEventListener('click', finishCheckout);
+    el('#btn-return').addEventListener('click', returnHome);
+    el('#btn-back').addEventListener('click', ()=> gotoPage('#page-products'));
+
+    // 歷史按鈕與返回
+    el('#btn-history').addEventListener('click', gotoHistory);
+    el('#btn-h-back').addEventListener('click', ()=> gotoPage('#page-products'));
+
+    // 清空所有紀錄
+    el('#btn-clear-all').addEventListener('click', ()=>{
+      const arr = loadAll();
+      if(!arr.length){ showToast('目前沒有紀錄'); return; }
+      if(confirm('確定要清空所有歷史紀錄嗎？')){
+        saveAll([]); renderHistory(); refreshTodayStats(); showToast('已清空');
+      }
+    });
+
+    // 全螢幕按鈕
+    el('#btn-fs').addEventListener('click', async ()=>{
+      try{ await toggleFullscreen(); }catch(_){}
+    });
+
+    // 感謝視窗關閉鍵
+    el('#thanks-close').addEventListener('click', ()=> hideThanksModal());
+
+    // PWA 註冊
+    if('serviceWorker' in navigator){ navigator.serviceWorker.register('./sw.js'); }
+  });
+  </script>
+</body>
+</html>
