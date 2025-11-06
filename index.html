@@ -1,0 +1,299 @@
+
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>草率季・收銀系統（DOS Blue/Yellow）</title>
+  <meta name="theme-color" content="#001080">
+
+  <!-- Google Fonts: VGA風格 + 中文 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&family=Press+Start+2P&display=swap" rel="stylesheet">
+
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="dos.css">
+</head>
+<body>
+  <audio id="ding" src="ding.wav" preload="auto"></audio>
+
+  <div class="topline vga">
+    <div id="clock">--:--:--</div>
+    <div id="today-stats">今日銷售：0 筆／NT$ 0</div>
+  </div>
+
+  <div id="app" class="wrap">
+    <!-- 頁面一：商品列表 -->
+    <section id="page-products" class="page active">
+      <div class="sum-bar vga">
+        合計金額：<span id="sum-top">NT$ 0</span>
+      </div>
+
+      <ul id="prod-list" class="prod-list"></ul>
+
+      <div class="bar actions">
+        <button id="btn-subtotal" class="primary">小計 →</button>
+      </div>
+    </section>
+
+    <!-- 頁面二：付款 -->
+    <section id="page-pay" class="page">
+      <div class="sum-bar vga">
+        合計金額：<span id="sum-pay">NT$ 0</span>
+      </div>
+
+      <div class="pay-box">
+        <label>輸入收現金金額：</label>
+        <input id="cash-input" type="number" inputmode="numeric" placeholder="輸入金額">
+        <div class="quick">
+          <button data-cash="exact">剛好</button>
+          <button data-cash="100">+100</button>
+          <button data-cash="500">+500</button>
+          <button data-cash="1000">+1000</button>
+        </div>
+
+        <div class="bar">
+          <button id="btn-back" class="">返回</button>
+          <button id="btn-confirm" class="primary">確定</button>
+        </div>
+
+        <!-- 結果＆收據 -->
+        <div id="result" class="result hidden">
+          <div class="dos-frame tight bigbox">
+            <div class="dos-inner bigtext">
+              <div class="row vga"><span>收　款：</span><span id="r-receive">0</span><span> 元</span></div>
+              <div class="row vga"><span>合　計：</span><span id="r-total">0</span><span> 元</span></div>
+              <div class="row vga"><span>找　回：</span><span id="r-change">0</span><span> 元</span></div>
+              <div id="r-deficit" class="deficit hidden vga">金額不足：還差 <b id="r-short">0</b> 元</div>
+            </div>
+          </div>
+
+          <div class="receipt zoomed">
+            <div class="receipt-title">本次購買內容</div>
+            <ul id="receipt-list"></ul>
+            <hr class="line">
+            <div class="summary vga">
+              合計 <b id="sum-b">0</b> 元 ｜ 收款 <b id="rcv-b">0</b> 元 ｜ 找零 <b id="chg-b">0</b> 元
+            </div>
+          </div>
+
+          <div class="bar">
+            <button id="btn-finish" class="primary" disabled>完成結帳</button>
+          </div>
+        </div>
+
+        <!-- 完成後要求確認返回 -->
+        <div id="after-finish" class="after hidden">
+          <div class="notice">交易完成！請確認後返回主頁。</div>
+          <div class="bar">
+            <button id="btn-return" class="primary">確認返回主頁</button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </div>
+
+  <script>
+  // ====== 作品清單（預設數量為 0）======
+  const PRODUCTS = [
+    {name:'《空心 In Place》', price:888, qty:0},
+    {name:'《30時間》 小誌', price:250, qty:0},
+    {name:'《30時間》 海報', price:100, qty:0},
+    {name:'《Hand-it 手心貼》', price:250, qty:0},
+    {name:'《Soft Drinks》', price:500, qty:0},
+    {name:'《pasteport 貼紙簿-街》', price:250, qty:0},
+    {name:'《pasteport 貼紙簿-危》', price:250, qty:0},
+    {name:'《蠟燭》', price:120, qty:0},
+    {name:'《馬年賀卡》', price:100, qty:0},
+    {name:'《pipo君貼紙》', price:50, qty:0},
+  ];
+  // =====================================
+
+  const el = s => document.querySelector(s);
+  const els = s => Array.from(document.querySelectorAll(s));
+
+  function money(n){ return Number(n||0).toFixed(0); }
+  function formatNT(n){ return 'NT$ ' + money(n); }
+
+  function calcSum(){
+    return PRODUCTS.reduce((s,p)=> s + p.price * (p.qty||0), 0);
+  }
+
+  function renderList(){
+    const ul = el('#prod-list');
+    ul.innerHTML = '';
+    PRODUCTS.forEach((p, idx)=>{
+      const li = document.createElement('li');
+      li.className = 'row prod';
+      li.innerHTML = `
+        <span class="p-name">${p.name}</span>
+        <span class="p-price vga">$${p.price}</span>
+        <div class="qty">
+          <button class="minus" aria-label="minus">−</button>
+          <span class="q vga">${p.qty||0}</span>
+          <button class="plus" aria-label="plus">＋</button>
+        </div>
+      `;
+      li.querySelector('.minus').addEventListener('click', ()=>{
+        PRODUCTS[idx].qty = Math.max(0, (PRODUCTS[idx].qty||0)-1);
+        updateSumAndList(idx, li);
+      });
+      li.querySelector('.plus').addEventListener('click', ()=>{
+        PRODUCTS[idx].qty = (PRODUCTS[idx].qty||0)+1;
+        updateSumAndList(idx, li);
+      });
+      ul.appendChild(li);
+    });
+    updateSumTop();
+  }
+
+  function updateSumAndList(idx, li){
+    li.querySelector('.q').textContent = PRODUCTS[idx].qty||0;
+    updateSumTop();
+  }
+
+  function updateSumTop(){
+    const sum = calcSum();
+    el('#sum-top').textContent = formatNT(sum);
+  }
+
+  function gotoPage(id){
+    els('.page').forEach(p=> p.classList.remove('active'));
+    el(id).classList.add('active');
+  }
+
+  // LocalStorage 紀錄
+  const KEY = 'pos.records';
+  const loadAll = () => { try{return JSON.parse(localStorage.getItem(KEY)||'[]');}catch(e){return [];} };
+  const saveAll = arr => localStorage.setItem(KEY, JSON.stringify(arr));
+  const saveRecord = rec => { const all=loadAll(); all.push(rec); saveAll(all); refreshTodayStats(); };
+
+  function resetAllQty(){
+    PRODUCTS.forEach(p=> p.qty = 0);
+    renderList();
+  }
+
+  // 更新今日統計與時鐘
+  function refreshTodayStats(){
+    const today = new Date().toISOString().slice(0,10);
+    const list = loadAll().filter(r=> (r.ts||'').slice(0,10) === today);
+    const sum = list.reduce((s,r)=> s + (r.total||0), 0);
+    el('#today-stats').textContent = `今日銷售：${list.length} 筆／${formatNT(sum)}`;
+  }
+  function startClock(){
+    const pad = n => String(n).padStart(2,'0');
+    setInterval(()=>{
+      const d = new Date();
+      const date = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+      const time = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      el('#clock').textContent = `${date} ${time}`;
+    }, 500);
+  }
+
+  // 付款頁相關
+  function enterPayPage(){
+    const sum = calcSum();
+    if(sum<=0){ alert('目前合計為 0，請先選擇數量。'); return; }
+    el('#sum-pay').textContent = formatNT(sum);
+    el('#cash-input').value = '';
+    el('#result').classList.add('hidden');
+    el('#after-finish').classList.add('hidden');
+    gotoPage('#page-pay');
+  }
+
+  function buildReceiptList(items){
+    const ul = el('#receipt-list'); ul.innerHTML = '';
+    items.forEach(it=>{
+      const li = document.createElement('li');
+      li.textContent = `${it.name} × ${it.qty} ＝ NT$ ${money(it.qty * it.price)}`;
+      ul.appendChild(li);
+    });
+  }
+
+  function confirmCash(){
+    const sum = calcSum();
+    const received = Number(el('#cash-input').value||0);
+    const change = Math.max(received - sum, 0);
+    const short = Math.max(sum - received, 0);
+    const items = PRODUCTS.filter(p=> (p.qty||0)>0).map(p=> ({name:p.name, price:p.price, qty:p.qty}));
+
+    el('#r-total').textContent = money(sum);
+    el('#r-receive').textContent = money(received);
+    el('#r-change').textContent = money(change);
+    buildReceiptList(items);
+    el('#sum-b').textContent = money(sum);
+    el('#rcv-b').textContent = money(received);
+    el('#chg-b').textContent = money(change);
+
+    const deficit = el('#r-deficit');
+    const shortEl = el('#r-short');
+    const finishBtn = el('#btn-finish');
+    if(short > 0){
+      shortEl.textContent = money(short);
+      deficit.classList.remove('hidden');
+      finishBtn.disabled = true;
+    }else{
+      deficit.classList.add('hidden');
+      finishBtn.disabled = false;
+    }
+
+    el('#result').classList.remove('hidden');
+    el('#after-finish').classList.add('hidden');
+  }
+
+  function finishCheckout(){
+    const sum = calcSum();
+    const received = Number(el('#cash-input').value||0);
+    if(received < sum){ return; } // guard
+    const change = Math.max(received - sum, 0);
+    const items = PRODUCTS.filter(p=> (p.qty||0)>0).map(p=> ({name:p.name, price:p.price, qty:p.qty}));
+
+    const rec = { ts:new Date().toISOString(), pm:'現金', total:sum, received, change, items };
+    saveRecord(rec);
+
+    // 音效
+    try{ el('#ding').currentTime = 0; el('#ding').play(); }catch(e){}
+    // 清空數量，但先停留在付款頁等待確認返回
+    resetAllQty();
+    el('#result').classList.add('hidden');
+    el('#after-finish').classList.remove('hidden');
+  }
+
+  function returnHome(){
+    gotoPage('#page-products');
+  }
+
+  window.addEventListener('DOMContentLoaded', ()=>{
+    renderList();
+    refreshTodayStats();
+    startClock();
+
+    // 小計 → 前往付款頁
+    el('#btn-subtotal').addEventListener('click', enterPayPage);
+
+    // 快捷金額按鈕
+    const quick = els('.quick button');
+    quick.forEach(b=> b.addEventListener('click', ()=>{
+      const sum = calcSum();
+      const v = b.dataset.cash;
+      let curr = Number(el('#cash-input').value||0);
+      if(v==='exact'){ curr = sum; } else { curr += Number(v||0); }
+      el('#cash-input').value = curr;
+    }));
+
+    // 付款流程
+    el('#btn-confirm').addEventListener('click', confirmCash);
+    el('#btn-finish').addEventListener('click', finishCheckout);
+    el('#btn-return').addEventListener('click', returnHome);
+    el('#btn-back').addEventListener('click', ()=> gotoPage('#page-products'));
+
+    // PWA 註冊
+    if('serviceWorker' in navigator){ navigator.serviceWorker.register('./sw.js'); }
+  });
+  </script>
+</body>
+</html>
