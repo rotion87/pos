@@ -416,7 +416,7 @@
     el('#after-finish').classList.add('hidden');
   }
 
-  // 感謝視窗：顯示/關閉（不再綁定全域 keydown，避免和 Enter 流程衝突）
+  // 感謝視窗：顯示/關閉
   function showThanksModal(){
     const m = el('#thanks-modal');
     if(!m) return;
@@ -480,8 +480,10 @@
       try{ await requestFullscreen(); }catch(_){}
     }
 
-    // 阻止空白鍵捲動
-    if(e.key === ' '){ e.preventDefault(); }
+    // 阻止空白鍵捲動（付款頁會拿來當「剛好」）
+    if(e.key === ' '){
+      e.preventDefault();
+    }
 
     // 快速顯示今日統計
     if(e.key.toLowerCase() === 't'){
@@ -495,40 +497,83 @@
       return;
     }
 
+    // ===== 商品頁操作 =====
     if(onProductsPage()){
-      if(e.key === 'ArrowUp'){ selectPrev(); }
-      else if(e.key === 'ArrowDown'){ selectNext(); }
-      else if(e.key === 'ArrowLeft'){ decreaseQty(); }
-      else if(e.key === 'ArrowRight'){ increaseQty(); }
-      else if(e.key === 'Enter'){ enterPayPage(); }
-    }else if(onPayPage()){
+      if(e.key === 'ArrowUp'){
+        e.preventDefault();
+        selectPrev();
+      }else if(e.key === 'ArrowDown'){
+        e.preventDefault();
+        selectNext();
+      }else if(e.key === 'ArrowLeft'){
+        e.preventDefault();
+        decreaseQty();
+      }else if(e.key === 'ArrowRight'){
+        e.preventDefault();
+        increaseQty();
+      }else if(e.key === 'Enter'){
+        e.preventDefault();
+        enterPayPage();
+      }
+      return;
+    }
+
+    // ===== 付款頁操作 =====
+    if(onPayPage()){
       const inp = el('#cash-input');
       const resultShown = !el('#result').classList.contains('hidden');
       const finishedShown = !el('#after-finish').classList.contains('hidden');
 
-      // 數字輸入
-      if(/[0-9]/.test(e.key)){
+      // 數字輸入（完全由程式接管，不用點輸入框）
+      if(/^[0-9]$/.test(e.key)){
+        e.preventDefault();
         inp.value = String(inp.value||'') + e.key;
-      }else if(e.key === 'Backspace'){
+        return;
+      }
+
+      // Backspace 刪除一位
+      if(e.key === 'Backspace'){
+        e.preventDefault();
         inp.value = String(inp.value||'').slice(0,-1);
-      }else if(e.key === ' '){
-        // 剛好
+        return;
+      }
+
+      // 空白鍵：設為「剛好」
+      if(e.key === ' '){
+        e.preventDefault();
         inp.value = calcSum();
-      }else if(e.key === 'Enter' || e.code === 'NumpadEnter'){
-        // Enter 1：顯示收據；Enter 2：完成結帳；Enter 3：關感謝視窗並回主頁
+        return;
+      }
+
+      // Enter / NumpadEnter：三段流程
+      if(e.key === 'Enter' || e.code === 'NumpadEnter'){
+        e.preventDefault();
         if(!resultShown && !finishedShown){
+          // 第一次 Enter：顯示收據
           confirmCash();
         }else if(resultShown && !finishedShown){
+          // 第二次 Enter：完成結帳
           finishCheckout();
         }else{
-          // 完成畫面
+          // 第三次 Enter：關閉感謝視窗並回主頁
           hideThanksModal();
           returnHome();
         }
-      }else if(e.key.toLowerCase() === 'f'){
+        return;
+      }
+
+      // F 鍵：強制完成結帳
+      if(e.key.toLowerCase() === 'f'){
+        e.preventDefault();
         finishCheckout();
-      }else if(e.key === 'Escape'){
+        return;
+      }
+
+      // ESC：回商品頁
+      if(e.key === 'Escape'){
+        e.preventDefault();
         gotoPage('#page-products');
+        return;
       }
     }
   });
@@ -536,11 +581,21 @@
   // ====== 數字小鍵盤支援（iPad / 外接鍵盤用）======
   document.addEventListener('keydown', e=>{
     if(onPayPage()){
-      if(e.code === 'NumpadAdd'){ el('[data-cash="100"]').click(); }
-      if(e.code === 'NumpadMultiply'){ el('[data-cash="500"]').click(); }
-      if(e.code === 'NumpadDivide'){ el('[data-cash="1000"]').click(); }
-      if(e.code === 'NumpadSubtract'){ el('[data-cash="exact"]').click(); }
-      if(e.code === 'NumpadEnter'){ /* Enter 流程已在上面統一處理 */ }
+      if(e.code === 'NumpadAdd'){
+        e.preventDefault();
+        el('[data-cash="100"]').click();
+      }else if(e.code === 'NumpadMultiply'){
+        e.preventDefault();
+        el('[data-cash="500"]').click();
+      }else if(e.code === 'NumpadDivide'){
+        e.preventDefault();
+        el('[data-cash="1000"]').click();
+      }else if(e.code === 'NumpadSubtract'){
+        e.preventDefault();
+        el('[data-cash="exact"]').click();
+      }else if(e.code === 'NumpadEnter'){
+        // Enter 流程已在上面統一處理
+      }
     }
   });
 
