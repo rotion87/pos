@@ -276,6 +276,7 @@
 
   function onProductsPage(){ return el('#page-products').classList.contains('active'); }
   function onPayPage(){ return el('#page-pay').classList.contains('active'); }
+  function onHistoryPage(){ return el('#page-history').classList.contains('active'); }
 
   function gotoPage(id){
     els('.page').forEach(p=> p.classList.remove('active'));
@@ -491,6 +492,17 @@
       return;
     }
 
+    // Insert：查看歷史 / 返回主頁
+    if (e.key === 'Insert' || e.code === 'Insert') {
+      e.preventDefault();
+      if (onHistoryPage()) {
+        gotoPage('#page-products');
+      } else {
+        gotoHistory();
+      }
+      return;
+    }
+
     // Alt+Enter 切換全螢幕
     if(e.altKey && e.key === 'Enter'){
       try{ await toggleFullscreen(); }catch(_){}
@@ -525,32 +537,36 @@
       const finishedShown = !el('#after-finish').classList.contains('hidden');
 
       // 數字輸入（完全由程式接管，不用點輸入框）
-    if (/^[0-9]$/.test(e.key)) {
-      e.preventDefault();
-      inp.value = String(inp.value || '') + e.key;
-      return;
-}
+      if (/^[0-9]$/.test(e.key)) {
+        e.preventDefault();
+        inp.value = String(inp.value || '') + e.key;
+        return;
+      }
 
-    // Backspace：刪除最後一位
-    if (e.key === 'Backspace') {
-     e.preventDefault();
-     inp.value = String(inp.value || '').slice(0, -1);
-     return;
-}
+      // Backspace：刪除最後一位
+      if (e.key === 'Backspace') {
+        e.preventDefault();
+        inp.value = String(inp.value || '').slice(0, -1);
+        return;
+      }
 
-    // Delete：一次全部清空
-    if (e.key === 'Delete') {
-     e.preventDefault();
-     inp.value = '';
-     return;
-}
+      // Delete / Clear：一次全部清空
+      if (
+        e.key === 'Delete' ||      // 一般鍵盤 Delete
+        e.key === 'Clear'  ||      // 部分鍵盤 Clear
+        e.code === 'NumLock'       // 有些鍵盤的 Clear 報成 NumLock
+      ) {
+        e.preventDefault();
+        inp.value = '';
+        return;
+      }
 
-// 空白鍵：設為「剛好」（直接變成合計金額）
-if (e.key === ' ') {
-  e.preventDefault();
-  inp.value = calcSum();
-  return;
-}
+      // 空白鍵：設為「剛好」
+      if(e.key === ' '){
+        e.preventDefault();
+        inp.value = calcSum();
+        return;
+      }
 
       // Enter / NumpadEnter：三段流程
       if(e.key === 'Enter' || e.code === 'NumpadEnter'){
