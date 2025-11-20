@@ -1,6 +1,6 @@
 // sw.js
 // ★ 版本號每次改動資產都要+1，確保使用者拿到新快取
-const CACHE = 'pos-dos-blue-v8';
+const CACHE = 'pos-dos-blue-v10';
 
 const ASSETS = [
   './',
@@ -11,7 +11,9 @@ const ASSETS = [
   './icon-192.png',
   './icon-512.png',
   './ding.wav',
-  './S__67870744.png', // ← 新增：感謝視窗圖片
+  './enter.wav',       // Enter 一般音效
+  './enterFinal.wav',  // 第三次 Enter 專用音效
+  './S__67870744.png', // 感謝視窗圖片
 ];
 
 self.addEventListener('install', (e) => {
