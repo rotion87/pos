@@ -1,6 +1,6 @@
 // sw.js
 // ★ 版本號每次改動資產都要+1，確保使用者拿到新快取
-const CACHE = 'pos-dos-blue-v10';
+const CACHE = 'pos-dos-blue-v11';
 
 const ASSETS = [
   './',
