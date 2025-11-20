@@ -345,7 +345,7 @@
   const loadAll = () => { try{return JSON.parse(localStorage.getItem(KEY)||'[]');}catch(e){return [];} };
   const saveAll = arr => localStorage.setItem(KEY, JSON.stringify(arr));
 
-  // ✅ 新版：用 x-www-form-urlencoded 的 data=... 傳到 Apps Script
+  // ✅ 新增：同步到雲端的函式
   function sendRecordToServer(rec){
     if (!API_URL) return;
 
@@ -358,21 +358,20 @@
       items: rec.items
     };
 
-    const body = 'data=' + encodeURIComponent(JSON.stringify(payload));
-
     fetch(API_URL, {
       method: 'POST',
+      mode: 'no-cors', // 不檢查回傳結果，只負責送出去
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
+        'Content-Type': 'application/json'
       },
-      body
+      body: JSON.stringify(payload)
     }).catch(err => {
       console.log('sendRecordToServer error', err);
       // 失敗也沒關係，本機 localStorage 還是有紀錄
     });
   }
 
-  // ✅ 本機存一份，同步送出一份
+  // ✅ 改成：本機存一份，同步送出一份
   const saveRecord = rec => {
     const all = loadAll();
     all.push(rec);
