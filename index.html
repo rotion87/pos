@@ -40,10 +40,14 @@
   </style>
 </head>
 <body>
-  <!-- 原本結帳音效 -->
+  <!-- 原本結帳音效（收銀機叮一聲） -->
   <audio id="ding" src="ding.wav" preload="auto"></audio>
-  <!-- 鍵盤音效（沿用 ding.wav；若要短音可換檔名） -->
+  <!-- 一般鍵盤按鍵音效 -->
   <audio id="key" src="ding.wav" preload="auto"></audio>
+  <!-- Enter 一般用音效 -->
+  <audio id="enterSound" src="enter.wav" preload="auto"></audio>
+  <!-- 第三次 Enter（完成結帳）專用音效 -->
+  <audio id="enterFinal" src="enterFinal.wav" preload="auto"></audio>
 
   <div class="topline vga">
     <div id="clock">--:--:--</div>
@@ -147,7 +151,7 @@
     <div class="thanks-box">
       <div class="thanks-inner">
         <img class="thanks-img" src="S__67870744.png" alt="感謝光臨">
-        <div class="thanks-text vga">謝謝您的光顧，歡迎下次再來！</div>
+        <div class="thanks-text vga">孤芳小隊謝謝您的光顧，祝您平安喜樂，歡迎下次再來！</div>
         <div class="bar" style="justify-content:center; margin-top:10px">
           <button id="thanks-close" class="primary">關閉</button>
         </div>
@@ -158,20 +162,20 @@
   <div id="toast" class="toast"></div>
 
   <script>
-  // ====== 作品清單（預設數量為 0）======
+  // ====== 作品清單（預設數量）======
   // ★★★ 在這裡改「品名」跟「金額」 ★★★
   const PRODUCTS = [
-    {name:'《空心IN PLACE》', price:900, qty:4},
-    {name:'《30時間》小誌', price:150, qty:15},
-    {name:'《30時間》海報', price:50, qty:100},
-    {name:'《Hand-it 手心貼》', price:250, qty:50},
+    {name:'《空心IN PLACE》', price:900, qty:0},
+    {name:'《30時間》小誌', price:150, qty:0},
+    {name:'《30時間》海報', price:50, qty:0},
+    {name:'《Hand-it 手心貼》', price:250, qty:0},
     {name:'《Soft Drinks 軟 罐裝絲巾》', price:500, qty:0},
-    {name:'《Paste Port 貼紙簿-上街》', price:300, qty:15},
-    {name:'《Paste Port 貼紙簿-注意》', price:300, qty:15},
-    {name:'《Paste Port 貼紙簿-上街+注意》', price:500, qty:15},
-    {name:'《燭籤》', price:100, qty:30},
-    {name:'《孤芳小隊 2026馬年賀卡》', price:100, qty:100},
-    {name:'《孤芳小隊 2025年年曆》', price:50, qty:20},
+    {name:'《Paste Port 貼紙簿-上街》', price:300, qty:0},
+    {name:'《Paste Port 貼紙簿-注意》', price:300, qty:0},
+    {name:'《Paste Port 貼紙簿-上街+注意》', price:500, qty:0},
+    {name:'《燭籤》', price:100, qty:0},
+    {name:'《孤芳小隊 2026馬年賀卡》', price:100, qty:0},
+    {name:'《孤芳小隊 2025年年曆》', price:50, qty:0},
   ];
   // =====================================
 
@@ -474,8 +478,10 @@
   let firstUserInteractionDone = false;
 
   document.addEventListener('keydown', async (e)=>{
-    // 任何鍵都發聲
-    playAudioById('#key');
+    // 非 Enter 的鍵先統一播放 key 音效
+    if (!(e.key === 'Enter' || e.code === 'NumpadEnter')) {
+      playAudioById('#key');
+    }
 
     // 第一次互動自動全螢幕
     if(!firstUserInteractionDone){
@@ -525,8 +531,10 @@
       }else if(e.key === 'ArrowRight'){
         e.preventDefault();
         increaseQty();
-      }else if(e.key === 'Enter'){
+      }else if(e.key === 'Enter' || e.code === 'NumpadEnter'){
         e.preventDefault();
+        // 第一階段 Enter：商品頁 → 付款頁
+        playAudioById('#enterSound');
         enterPayPage();
       }
       return;
@@ -573,26 +581,31 @@
         return;
       }
 
-      // Enter / NumpadEnter：三段流程
+      // Enter / NumpadEnter：三段流程（第二、第三、第四階段）
       if(e.key === 'Enter' || e.code === 'NumpadEnter'){
         e.preventDefault();
+
         if(!resultShown && !finishedShown){
-          // 第一次 Enter：顯示收據
+          // 第二階段 Enter：付款頁 → 顯示收據
+          playAudioById('#enterSound');
           confirmCash();
         }else if(resultShown && !finishedShown){
-          // 第二次 Enter：完成結帳
+          // 第三階段 Enter：顯示收據 → 完成結帳（特別音效）
+          playAudioById('#enterFinal');
           finishCheckout();
         }else{
-          // 第三次 Enter：關閉感謝視窗並回主頁
+          // 第四階段 Enter：關閉感謝視窗 → 回主頁
+          playAudioById('#enterSound');
           hideThanksModal();
           returnHome();
         }
         return;
       }
 
-      // F 鍵：強制完成結帳
+      // F 鍵：強制完成結帳（沿用 final 音效）
       if(e.key.toLowerCase() === 'f'){
         e.preventDefault();
+        playAudioById('#enterFinal');
         finishCheckout();
         return;
       }
