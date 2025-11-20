@@ -226,6 +226,8 @@
     {name:'《孤芳小隊 2026馬年賀卡》', price:100, qty:0},
     {name:'《孤芳小隊 2025年曆》', price:50, qty:0},
   ];
+  // ====== 即時回傳 API ======
+  const API_URL = 'https://script.google.com/macros/s/AKfycbzqYqtKLmIxa84SnOepD_2AYZ3_2UaJUX2rm8TfqXnFsJZEqbVk7OLQTXeSUegeVdA/exec';
   // =====================================
 
   const el = s => document.querySelector(s);
@@ -342,7 +344,41 @@
   const KEY = 'pos.records';
   const loadAll = () => { try{return JSON.parse(localStorage.getItem(KEY)||'[]');}catch(e){return [];} };
   const saveAll = arr => localStorage.setItem(KEY, JSON.stringify(arr));
-  const saveRecord = rec => { const all=loadAll(); all.push(rec); saveAll(all); refreshTodayStats(); };
+
+  // ✅ 新增：同步到雲端的函式
+  function sendRecordToServer(rec){
+    if (!API_URL) return;
+
+    const payload = {
+      ts: rec.ts,
+      pm: rec.pm,
+      total: rec.total,
+      received: rec.received,
+      change: rec.change,
+      items: rec.items
+    };
+
+    fetch(API_URL, {
+      method: 'POST',
+      mode: 'no-cors', // 不檢查回傳結果，只負責送出去
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    }).catch(err => {
+      console.log('sendRecordToServer error', err);
+      // 失敗也沒關係，本機 localStorage 還是有紀錄
+    });
+  }
+
+  // ✅ 改成：本機存一份，同步送出一份
+  const saveRecord = rec => {
+    const all = loadAll();
+    all.push(rec);
+    saveAll(all);
+    refreshTodayStats();
+    sendRecordToServer(rec);
+  };
 
   function resetAllQty(){
     PRODUCTS.forEach(p=> p.qty = 0);
