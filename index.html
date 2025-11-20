@@ -159,6 +159,7 @@
 
   <script>
   // ====== 作品清單（預設數量為 0）======
+  // ★★★ 在這裡改「品名」跟「金額」 ★★★
   const PRODUCTS = [
     {name:'《空心IN PLACE》', price:900, qty:4},
     {name:'《30時間》小誌', price:150, qty:15},
@@ -551,12 +552,15 @@
         return;
       }
 
-      // Delete / Clear：一次全部清空
-      if (
-        e.key === 'Delete' ||      // 一般鍵盤 Delete
-        e.key === 'Clear'  ||      // 部分鍵盤 Clear
-        e.code === 'NumLock'       // 有些鍵盤的 Clear 報成 NumLock
-      ) {
+      // Delete / Clear：一次全部清空（擴充判斷）
+      const isClearKey =
+        e.key === 'Delete' ||        // 一般鍵盤 Delete
+        e.key === 'Clear'  ||        // 部分鍵盤 Clear
+        e.code === 'NumLock' ||      // 有些鍵盤的 Clear 報成 NumLock
+        e.keyCode === 46   ||        // 傳統 Delete keyCode
+        e.keyCode === 12;            // 部分數字鍵盤 Clear keyCode
+
+      if (isClearKey) {
         e.preventDefault();
         inp.value = '';
         return;
